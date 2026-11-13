@@ -1,14 +1,15 @@
-# 🌐 TaskBoard — Semana 13
+# 🔐 TaskBoard — Semana 14
 
 ![Laravel](https://img.shields.io/badge/Laravel-12-red?logo=laravel)
 ![PHP](https://img.shields.io/badge/PHP-8.2-blue?logo=php)
 ![MySQL](https://img.shields.io/badge/MySQL-MariaDB-orange?logo=mysql)
+![Sanctum](https://img.shields.io/badge/Laravel-Sanctum-red)
 ![API](https://img.shields.io/badge/API-REST-0B2E59)
 ![UPED](https://img.shields.io/badge/UPED-Integración_de_Sistemas-0B2E59)
 
 Proyecto desarrollado para la asignatura **Integración de Sistemas** de la **Universidad Pedagógica de El Salvador (UPED)**.
 
-Durante la Semana 13 se agregó una API REST a TaskBoard para exponer comercios y transacciones mediante respuestas JSON controladas con API Resources.
+Durante la Semana 14 se protegió la API REST de TaskBoard utilizando **Laravel Sanctum**, agregando autenticación mediante tokens personales, aislamiento de datos por usuario, logout y administración de sesiones abiertas.
 
 **Estudiante:** Josthyn Stanley Cruz Vásquez  
 **Carrera:** Ingeniería en Sistemas y Computación  
@@ -19,328 +20,335 @@ Durante la Semana 13 se agregó una API REST a TaskBoard para exponer comercios 
 
 ## 🎯 Objetivo de la semana
 
-Construir una API REST para TaskBoard que permita consultar, crear y eliminar datos mediante JSON, utilizando API Resources para controlar la información expuesta y una herramienta de pruebas HTTP para verificar códigos de respuesta, validaciones y filtros.
+Convertir la API abierta de la Semana 13 en una API protegida capaz de identificar al usuario mediante tokens personales, proteger rutas con `auth:sanctum`, filtrar datos por propietario, revocar tokens y administrar sesiones abiertas por dispositivo.
 
 ---
 
-# 🚪 Activación de la API
+## 🚪 Estado inicial: API abierta
 
-Laravel fue configurado para trabajar con rutas de API mediante:
-
-```bash
-php artisan install:api
-```
-
-Esto habilitó `routes/api.php`, cuyas rutas utilizan automáticamente el prefijo `/api`.
-
----
-
-# 🏪 Primer endpoint de comercios
-
-Se creó inicialmente:
+Antes de agregar Sanctum se comprobó que la API permitía acciones sin autenticación:
 
 ```text
 GET /api/comercios
+GET /api/transacciones
+POST /api/transacciones
+DELETE /api/transacciones/{id}
 ```
 
-devolviendo directamente los registros del modelo `Comercio`. Esta primera prueba permitió observar que se exponían campos internos como `user_id`, `created_at` y `updated_at`.
+Esto demostró la necesidad de proteger la API.
 
 ---
 
-# 🧪 Pruebas con Insomnia
+## 🛡️ Laravel Sanctum
 
-Para verificar la API se utilizó **Insomnia** con peticiones HTTP y el encabezado:
+Se verificó Sanctum con:
+
+```bash
+composer show laravel/sanctum
+php artisan migrate:status
+```
+
+y la existencia de la tabla:
 
 ```text
-Accept: application/json
+personal_access_tokens
 ```
-
-Con Insomnia se comprobaron métodos, URLs, encabezados, cuerpos JSON y códigos de respuesta.
 
 ---
 
-# 🧩 ComercioResource
+## 👤 HasApiTokens en User
 
-Se creó `app/Http/Resources/ComercioResource.php` para controlar los campos públicos:
+El modelo `User` utiliza:
 
 ```php
-public function toArray(Request $request): array
-{
-    return [
-        'id' => $this->id,
-        'nombre' => $this->nombre_comercio,
-        'rubro' => $this->rubro,
-    ];
-}
+use Laravel\Sanctum\HasApiTokens;
 ```
 
-La respuesta pasó a utilizar una estructura controlada dentro de `data`, sin exponer campos internos.
+y:
+
+```php
+use HasApiTokens, HasFactory, Notifiable;
+```
+
+Esto habilita `createToken()`, `tokens()` y `currentAccessToken()`.
 
 ---
 
-# 💳 TransaccionResource
+## 🔑 Login de API
 
-Se creó `app/Http/Resources/TransaccionResource.php`:
-
-```php
-public function toArray(Request $request): array
-{
-    return [
-        'id' => $this->id,
-        'cliente' => $this->cliente_nombre,
-        'monto' => (float) $this->monto,
-        'estado' => $this->estado,
-        'fecha' => $this->created_at->toIso8601String(),
-    ];
-}
-```
-
-El monto se devuelve como número y la fecha en formato ISO 8601.
-
----
-
-# 🔗 Relaciones con whenLoaded()
-
-El detalle de un comercio incluye sus transacciones solamente cuando la relación fue cargada:
-
-```php
-'transacciones' => TransaccionResource::collection(
-    $this->whenLoaded('transacciones')
-),
-```
-
-Por eso `GET /api/comercios` no carga transacciones, mientras `GET /api/comercios/1` sí puede incluirlas.
-
----
-
-# 🛣️ apiResource para transacciones
-
-Se creó `app/Http/Controllers/Api/TransaccionApiController.php` y se registraron las rutas con:
-
-```php
-Route::apiResource('transacciones', TransaccionApiController::class)
-    ->parameters([
-        'transacciones' => 'transaccion',
-    ]);
-```
-
-La personalización del parámetro permite utilizar correctamente el Route Model Binding.
-
-Las rutas principales son:
+Se creó:
 
 ```text
-GET      /api/transacciones
-POST     /api/transacciones
-GET      /api/transacciones/{transaccion}
-PUT      /api/transacciones/{transaccion}
-PATCH    /api/transacciones/{transaccion}
-DELETE   /api/transacciones/{transaccion}
+app/Http/Controllers/Api/AuthApiController.php
+```
+
+El login valida correo, contraseña y dispositivo.
+
+Una autenticación correcta responde:
+
+```text
+201 Created
+```
+
+y devuelve un token Bearer.
+
+Una contraseña incorrecta responde:
+
+```text
+422 Unprocessable Content
 ```
 
 ---
 
-# ➕ Crear transacciones por API
+## 🔒 Rutas protegidas con auth:sanctum
 
-Se creó `GuardarTransaccionApiRequest.php` para validar la API sin modificar la seguridad web de Semana 12.
-
-Validaciones principales:
+El login permanece público:
 
 ```php
-'comercio_id' => ['required', 'exists:comercios,id'],
-'cliente_nombre' => ['required', 'string', 'min:3', 'max:255'],
-'monto' => ['required', 'numeric', 'min:0.01'],
-'estado' => ['nullable', 'in:Iniciada,Completada,Fallida'],
+Route::post('/login', [AuthApiController::class, 'login'])
+    ->middleware('throttle:5,1');
 ```
 
-Una creación válida con `POST /api/transacciones` responde `201 Created`.
-
----
-
-# ⚠️ Validaciones 422
-
-Una petición inválida responde:
-
-```text
-422 Unprocessable Entity
-```
-
-con un objeto `errors` que indica los campos incorrectos.
-
----
-
-# 🗑️ Eliminar transacciones
-
-El método `destroy()` elimina una transacción y responde:
-
-```text
-204 No Content
-```
-
-Si se intenta eliminar nuevamente el mismo registro, la API responde:
-
-```text
-404 Not Found
-```
-
----
-
-# 📡 Importancia de Accept: application/json
-
-Con `Accept: application/json`, una validación incorrecta responde `422` en JSON.
-
-Sin pedir explícitamente JSON, se comprobó una respuesta:
-
-```text
-302 Found
-```
-
-lo que demuestra la importancia de indicar el formato esperado por el cliente.
-
----
-
-# 🔎 Filtro por estado
-
-Se agregó un parámetro opcional:
+Las demás rutas están dentro de:
 
 ```php
-public function index()
-{
-    $estado = request()->query('estado');
+Route::middleware('auth:sanctum')->group(function () {
+    // rutas protegidas
+});
+```
 
-    $transacciones = Transaccion::when(
-        $estado,
-        fn ($query) => $query->where('estado', $estado)
+Entre ellas:
+
+```text
+GET    /api/yo
+POST   /api/logout
+GET    /api/comercios
+GET    /api/comercios/{comercio}
+GET    /api/transacciones
+POST   /api/transacciones
+GET    /api/transacciones/{transaccion}
+DELETE /api/transacciones/{transaccion}
+GET    /api/tokens
+DELETE /api/tokens/{id}
+```
+
+---
+
+## 🙋 Endpoint /api/yo
+
+`GET /api/yo` permite comprobar qué usuario pertenece al token.
+
+Con token válido:
+
+```text
+200 OK
+```
+
+Sin token:
+
+```text
+401 Unauthorized
+```
+
+---
+
+## 📡 Accept: application/json
+
+Se comprobó que:
+
+```text
+Sin token + Accept: application/json → 401
+Sin token + sin Accept              → 302
+```
+
+Esto demuestra la importancia de indicar que el cliente espera JSON.
+
+---
+
+## 🏪 Aislamiento de comercios
+
+Los comercios se filtran mediante:
+
+```php
+$request->user()
+    ->comercios()
+    ->orderBy('nombre_comercio')
+    ->get();
+```
+
+Además, el detalle de un comercio ajeno se protege con:
+
+```php
+abort_unless(
+    $comercio->user_id === $request->user()->id,
+    404
+);
+```
+
+Se comprobó que Ana solo ve sus comercios y Carlos solo los suyos.
+
+---
+
+## 💳 Protección de transacciones
+
+Las transacciones se filtran por el usuario dueño del comercio:
+
+```php
+Transaccion::whereHas(
+    'comercio',
+    fn ($q) => $q->where(
+        'user_id',
+        $request->user()->id
     )
-        ->latest()
-        ->get();
-
-    return TransaccionResource::collection($transacciones);
-}
+)
 ```
 
-Ejemplo:
-
-```text
-GET /api/transacciones?estado=Completada
-```
-
-devuelve únicamente transacciones completadas.
-
-Un estado sin coincidencias devuelve:
-
-```json
-{
-  "data": []
-}
-```
-
-con código `200 OK`.
+También se agregó una validación de propiedad para bloquear acceso a transacciones ajenas.
 
 ---
 
-# ✅ Códigos HTTP comprobados
+## ✅ Validación al crear transacciones
+
+`GuardarTransaccionApiRequest` valida que el comercio pertenezca al usuario autenticado mediante `Rule::exists()` y `user_id`.
+
+Si Ana intenta crear una transacción en un comercio de Carlos, la API responde:
+
+```text
+422 Unprocessable Content
+```
+
+---
+
+## 🚪 Logout y revocación del token
+
+El logout elimina únicamente el token actual:
+
+```php
+$request->user()
+    ->currentAccessToken()
+    ->delete();
+```
+
+Ciclo comprobado:
+
+```text
+GET /api/yo      → 200
+POST /api/logout → 204
+GET /api/yo      → 401
+```
+
+---
+
+## ⏳ Expiración de tokens
+
+En `config/sanctum.php` se configuró:
+
+```php
+'expiration' => 60 * 24,
+```
+
+equivalente a 24 horas.
+
+---
+
+## 📱 Sesiones abiertas
+
+Se agregó:
+
+```text
+GET /api/tokens
+```
+
+para listar sesiones abiertas sin exponer el hash del token.
+
+También:
+
+```text
+DELETE /api/tokens/{id}
+```
+
+para cerrar una sesión específica.
+
+Una sesión eliminada deja de funcionar y responde:
+
+```text
+401 Unauthorized
+```
+
+si se intenta reutilizar su token.
+
+---
+
+## ✅ Códigos HTTP comprobados
 
 | Código | Significado | Ejemplo |
 |---|---|---|
-| `200` | Petición correcta | GET comercios y transacciones |
-| `201` | Recurso creado | POST transacción válida |
-| `204` | Eliminación correcta sin cuerpo | DELETE |
-| `302` | Redirección | Petición inválida sin Accept JSON |
-| `404` | Recurso inexistente | Comercio o transacción no encontrada |
-| `422` | Error de validación | POST con datos inválidos |
+| `200` | Petición correcta | `/api/yo`, comercios y transacciones |
+| `201` | Token creado | Login correcto |
+| `204` | Sin contenido | Logout / eliminar token |
+| `302` | Redirección | Sin `Accept` |
+| `401` | No autenticado | Sin token o token revocado |
+| `404` | Recurso ajeno | Comercio/transacción de otro usuario |
+| `422` | Validación fallida | Credenciales o comercio inválido |
 
 ---
 
-# 🧪 Pruebas realizadas
+## 🧪 Pruebas realizadas
 
-Se verificaron:
-
-- `GET /api/comercios`
-- `GET /api/comercios/1`
-- `GET /api/comercios/999`
-- `GET /api/transacciones`
-- `GET /api/transacciones/1`
-- `POST /api/transacciones` válido
-- `POST /api/transacciones` inválido
-- `DELETE /api/transacciones/{id}`
-- segundo DELETE al mismo ID
-- petición inválida sin `Accept: application/json`
-- filtro `?estado=Completada`
-- filtro sin coincidencias
-
----
-
-# ⚠️ Alcance de seguridad de Semana 13
-
-La API desarrollada esta semana todavía trabaja sin autenticación por token.
-
-Las rutas de `routes/api.php` no dependen del login web ni de las cookies de sesión implementadas en Semana 12.
-
-La autenticación específica de API mediante tokens se trabajará en la siguiente etapa.
+- API abierta antes de Sanctum.
+- Login correcto de Ana.
+- Login correcto de Carlos.
+- Login incorrecto.
+- `GET /api/yo`.
+- Peticiones con y sin token.
+- Peticiones con y sin `Accept`.
+- Comercios filtrados por usuario.
+- Bloqueo de comercios ajenos.
+- Transacciones filtradas por usuario.
+- Bloqueo de transacciones ajenas.
+- Validación de comercio al crear transacciones.
+- Logout.
+- Reutilización de token revocado.
+- Consulta de sesiones abiertas.
+- Eliminación de una sesión concreta.
 
 ---
 
-# 🧱 Estructura principal trabajada
+## 🔐 Buenas prácticas
 
-```text
-app/
-├── Http/
-│   ├── Controllers/
-│   │   └── Api/
-│   │       └── TransaccionApiController.php
-│   ├── Requests/
-│   │   └── GuardarTransaccionApiRequest.php
-│   └── Resources/
-│       ├── ComercioResource.php
-│       └── TransaccionResource.php
-
-routes/
-├── api.php
-└── web.php
-```
+- No publicar tokens reales.
+- No colocar tokens en URLs.
+- Usar `Bearer Token`.
+- Configurar expiración.
+- Revocar tokens al cerrar sesión.
+- Usar HTTPS en producción.
+- No exponer hashes de `personal_access_tokens`.
+- Filtrar datos por usuario.
 
 ---
 
-# 🛠️ Tecnologías utilizadas
+## 🛠️ Tecnologías utilizadas
 
-- Laravel
+- Laravel 12
+- Laravel Sanctum
 - PHP 8.2
 - MySQL / MariaDB
 - Eloquent ORM
-- Laravel API Resources
 - REST
 - JSON
 - Insomnia
-- Form Requests
 - Git
 - GitHub
 - XAMPP
 
 ---
 
-# ▶️ Ejecución del proyecto
-
-Clonar el repositorio:
+## ▶️ Ejecución
 
 ```bash
-git clone https://github.com/StanleyJv/taskboard-semana13.git
-```
-
-Entrar al proyecto:
-
-```bash
-cd taskboard-semana13
-```
-
-Instalar dependencias:
-
-```bash
+git clone https://github.com/StanleyJv/taskboard-semana14.git
+cd taskboard-semana14
 composer install
-```
-
-Configurar `.env`, generar la clave y ejecutar:
-
-```bash
 php artisan key:generate
 php artisan migrate:fresh --seed
 php artisan serve
@@ -354,9 +362,9 @@ http://127.0.0.1:8000/api
 
 ---
 
-# 🔗 Repositorio
+## 🔗 Repositorio
 
-https://github.com/StanleyJv/taskboard-semana13
+https://github.com/StanleyJv/taskboard-semana14
 
 ---
 

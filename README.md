@@ -1,15 +1,16 @@
-# 🔐 TaskBoard — Semana 14
+# 🔐🌐 TaskBoard — Semana 14
 
 ![Laravel](https://img.shields.io/badge/Laravel-12-red?logo=laravel)
 ![PHP](https://img.shields.io/badge/PHP-8.2-blue?logo=php)
 ![MySQL](https://img.shields.io/badge/MySQL-MariaDB-orange?logo=mysql)
 ![Sanctum](https://img.shields.io/badge/Laravel-Sanctum-red)
 ![API](https://img.shields.io/badge/API-REST-0B2E59)
+![Insomnia](https://img.shields.io/badge/Insomnia-API_Testing-5A36E9?logo=insomnia)
 ![UPED](https://img.shields.io/badge/UPED-Integración_de_Sistemas-0B2E59)
 
 Proyecto desarrollado para la asignatura **Integración de Sistemas** de la **Universidad Pedagógica de El Salvador (UPED)**.
 
-Durante la Semana 14 se protegió la API REST de TaskBoard utilizando **Laravel Sanctum**, agregando autenticación mediante tokens personales, aislamiento de datos por usuario, logout y administración de sesiones abiertas.
+Durante la **Semana 14** se protegió la API REST de TaskBoard con Laravel Sanctum y luego se realizaron pruebas, depuración y consumo desde distintos clientes.
 
 **Estudiante:** Josthyn Stanley Cruz Vásquez  
 **Carrera:** Ingeniería en Sistemas y Computación  
@@ -18,15 +19,17 @@ Durante la Semana 14 se protegió la API REST de TaskBoard utilizando **Laravel 
 
 ---
 
-## 🎯 Objetivo de la semana
+# 🎯 Objetivo general
 
-Convertir la API abierta de la Semana 13 en una API protegida capaz de identificar al usuario mediante tokens personales, proteger rutas con `auth:sanctum`, filtrar datos por propietario, revocar tokens y administrar sesiones abiertas por dispositivo.
+Convertir la API abierta de Semana 13 en una API protegida mediante tokens personales, aplicar aislamiento por usuario, validar permisos sobre comercios y transacciones, probar distintos escenarios de seguridad y consumir la API desde PHP y JavaScript.
 
 ---
 
-## 🚪 Estado inicial: API abierta
+# 📅 Jueves — Autenticación de API con Laravel Sanctum
 
-Antes de agregar Sanctum se comprobó que la API permitía acciones sin autenticación:
+## 🚪 API inicialmente abierta
+
+Antes de Sanctum se comprobó que la API permitía acciones sin autenticación:
 
 ```text
 GET /api/comercios
@@ -35,20 +38,20 @@ POST /api/transacciones
 DELETE /api/transacciones/{id}
 ```
 
-Esto demostró la necesidad de proteger la API.
+Esto evidenció que cualquier cliente podía consultar, crear o eliminar información.
 
 ---
 
-## 🛡️ Laravel Sanctum
+## 🛡️ Preparación de Sanctum
 
-Se verificó Sanctum con:
+Se verificó Laravel Sanctum mediante:
 
 ```bash
 composer show laravel/sanctum
 php artisan migrate:status
 ```
 
-y la existencia de la tabla:
+y la existencia de:
 
 ```text
 personal_access_tokens
@@ -58,7 +61,7 @@ personal_access_tokens
 
 ## 👤 HasApiTokens en User
 
-El modelo `User` utiliza:
+El modelo `User` fue actualizado con:
 
 ```php
 use Laravel\Sanctum\HasApiTokens;
@@ -70,7 +73,13 @@ y:
 use HasApiTokens, HasFactory, Notifiable;
 ```
 
-Esto habilita `createToken()`, `tokens()` y `currentAccessToken()`.
+Esto habilita:
+
+```text
+createToken()
+tokens()
+currentAccessToken()
+```
 
 ---
 
@@ -100,7 +109,7 @@ Una contraseña incorrecta responde:
 
 ---
 
-## 🔒 Rutas protegidas con auth:sanctum
+## 🔒 Rutas protegidas
 
 El login permanece público:
 
@@ -109,7 +118,7 @@ Route::post('/login', [AuthApiController::class, 'login'])
     ->middleware('throttle:5,1');
 ```
 
-Las demás rutas están dentro de:
+Las demás rutas se protegen con:
 
 ```php
 Route::middleware('auth:sanctum')->group(function () {
@@ -136,7 +145,7 @@ DELETE /api/tokens/{id}
 
 ## 🙋 Endpoint /api/yo
 
-`GET /api/yo` permite comprobar qué usuario pertenece al token.
+Permite identificar al usuario dueño del token.
 
 Con token válido:
 
@@ -154,14 +163,12 @@ Sin token:
 
 ## 📡 Accept: application/json
 
-Se comprobó que:
+Se comprobó:
 
 ```text
 Sin token + Accept: application/json → 401
 Sin token + sin Accept              → 302
 ```
-
-Esto demuestra la importancia de indicar que el cliente espera JSON.
 
 ---
 
@@ -176,7 +183,7 @@ $request->user()
     ->get();
 ```
 
-Además, el detalle de un comercio ajeno se protege con:
+El acceso a un comercio ajeno se bloquea con:
 
 ```php
 abort_unless(
@@ -185,7 +192,7 @@ abort_unless(
 );
 ```
 
-Se comprobó que Ana solo ve sus comercios y Carlos solo los suyos.
+Se verificó que Ana solo vea sus comercios y Carlos solo los suyos.
 
 ---
 
@@ -203,15 +210,15 @@ Transaccion::whereHas(
 )
 ```
 
-También se agregó una validación de propiedad para bloquear acceso a transacciones ajenas.
+También se agregó autorización para bloquear transacciones ajenas.
 
 ---
 
 ## ✅ Validación al crear transacciones
 
-`GuardarTransaccionApiRequest` valida que el comercio pertenezca al usuario autenticado mediante `Rule::exists()` y `user_id`.
+`GuardarTransaccionApiRequest` valida que el comercio pertenezca al usuario autenticado.
 
-Si Ana intenta crear una transacción en un comercio de Carlos, la API responde:
+Si Ana intenta crear una transacción en un comercio de Carlos:
 
 ```text
 422 Unprocessable Content
@@ -219,9 +226,9 @@ Si Ana intenta crear una transacción en un comercio de Carlos, la API responde:
 
 ---
 
-## 🚪 Logout y revocación del token
+## 🚪 Logout y revocación
 
-El logout elimina únicamente el token actual:
+El logout elimina el token actual:
 
 ```php
 $request->user()
@@ -241,7 +248,7 @@ GET /api/yo      → 401
 
 ## ⏳ Expiración de tokens
 
-En `config/sanctum.php` se configuró:
+En `config/sanctum.php`:
 
 ```php
 'expiration' => 60 * 24,
@@ -259,7 +266,7 @@ Se agregó:
 GET /api/tokens
 ```
 
-para listar sesiones abiertas sin exponer el hash del token.
+para listar sesiones del usuario autenticado sin exponer el token.
 
 También:
 
@@ -269,52 +276,234 @@ DELETE /api/tokens/{id}
 
 para cerrar una sesión específica.
 
-Una sesión eliminada deja de funcionar y responde:
+---
+
+# 📅 Viernes — Probar, depurar y consumir la API protegida
+
+## 🧪 Colección con dos identidades
+
+La colección de Insomnia se organizó con:
+
+```text
+0. Públicas
+1. Ana
+2. Carlos
+```
+
+Se guardaron variables:
+
+```text
+{{ tokenAna }}
+{{ tokenCarlos }}
+```
+
+para evitar pegar tokens manualmente.
+
+---
+
+## ✅ Pruebas automáticas
+
+Se agregaron pruebas automáticas en Insomnia para validar:
+
+- códigos HTTP
+- aislamiento de comercios
+- ausencia de `user_id`
+- respuestas `200`, `401`, `404` y `422`
+
+---
+
+## 🧾 Matriz de pruebas
+
+Se verificaron:
+
+- login de Ana y Carlos
+- login inválido
+- acceso sin token
+- `/api/yo`
+- aislamiento de comercios
+- creación en comercio ajeno
+- eliminación de transacción ajena
+- logout y revocación
+
+---
+
+# 🧨 Depuración: errores provocados
+
+## Error A — token sin Bearer
+
+Resultado:
 
 ```text
 401 Unauthorized
 ```
 
-si se intenta reutilizar su token.
+Corrección:
+
+```text
+Authorization: Bearer {{ tokenAna }}
+```
+
+## Error B — falta Accept
+
+Resultado:
+
+```text
+302 Found
+```
+
+Corrección:
+
+```text
+Accept: application/json
+```
+
+## Error C — HasApiTokens eliminado
+
+Resultado:
+
+```text
+500 Internal Server Error
+```
+
+Corrección:
+
+```php
+use Laravel\Sanctum\HasApiTokens;
+```
+
+y:
+
+```php
+use HasApiTokens, HasFactory, Notifiable;
+```
+
+## Error D — fuga lógica de comercios
+
+La API siguió respondiendo:
+
+```text
+200 OK
+```
+
+pero Ana pudo ver comercios ajenos.
+
+La prueba automática detectó el problema.
+
+Corrección:
+
+```php
+$request->user()->comercios()
+```
 
 ---
 
-## ✅ Códigos HTTP comprobados
+# 🔍 Inspección de tokens con Tinker
 
-| Código | Significado | Ejemplo |
-|---|---|---|
-| `200` | Petición correcta | `/api/yo`, comercios y transacciones |
-| `201` | Token creado | Login correcto |
-| `204` | Sin contenido | Logout / eliminar token |
-| `302` | Redirección | Sin `Accept` |
-| `401` | No autenticado | Sin token o token revocado |
-| `404` | Recurso ajeno | Comercio/transacción de otro usuario |
-| `422` | Validación fallida | Credenciales o comercio inválido |
+Se utilizaron comandos como:
 
----
+```php
+User::find(1)->tokens()->get(['id', 'name', 'last_used_at']);
+```
 
-## 🧪 Pruebas realizadas
+y:
 
-- API abierta antes de Sanctum.
-- Login correcto de Ana.
-- Login correcto de Carlos.
-- Login incorrecto.
-- `GET /api/yo`.
-- Peticiones con y sin token.
-- Peticiones con y sin `Accept`.
-- Comercios filtrados por usuario.
-- Bloqueo de comercios ajenos.
-- Transacciones filtradas por usuario.
-- Bloqueo de transacciones ajenas.
-- Validación de comercio al crear transacciones.
-- Logout.
-- Reutilización de token revocado.
-- Consulta de sesiones abiertas.
-- Eliminación de una sesión concreta.
+```php
+PersonalAccessToken::findToken('TOKEN');
+```
+
+Un token revocado devuelve:
+
+```text
+null
+```
 
 ---
 
-## 🔐 Buenas prácticas
+# 🧩 Consumo desde PHP
+
+La API se consumió desde Tinker usando el cliente HTTP de Laravel.
+
+Login:
+
+```php
+$login = Http::acceptJson()->post("$base/login", [
+    'email' => 'ana@taskboard.test',
+    'password' => 'password123',
+    'dispositivo' => 'tienda-en-linea',
+]);
+```
+
+Consulta autenticada:
+
+```php
+$r = Http::withToken($token)
+    ->acceptJson()
+    ->get("$base/transacciones", [
+        'estado' => 'Completada'
+    ]);
+```
+
+Resultados:
+
+```text
+Login → 201
+Consulta → 200
+```
+
+Un token inválido responde:
+
+```text
+401 Unauthorized
+```
+
+---
+
+# 🌐 Cliente web con fetch()
+
+Se creó:
+
+```text
+public/cliente.html
+```
+
+El cliente permite:
+
+- iniciar sesión
+- obtener token
+- consultar comercios
+- mostrar datos del usuario
+- reaccionar a `401`
+- cerrar sesión
+
+Las peticiones protegidas utilizan:
+
+```javascript
+'Authorization': 'Bearer ' + token
+```
+
+---
+
+## 🏪 Panel del cliente web
+
+El cliente fue ampliado para mostrar la cantidad de transacciones completadas por comercio.
+
+También incluye un botón:
+
+```text
+Salir
+```
+
+que ejecuta:
+
+```text
+POST /api/logout
+```
+
+y revoca el token `cliente-web`.
+
+---
+
+# 🔐 Buenas prácticas aplicadas
 
 - No publicar tokens reales.
 - No colocar tokens en URLs.
@@ -322,12 +511,29 @@ si se intenta reutilizar su token.
 - Configurar expiración.
 - Revocar tokens al cerrar sesión.
 - Usar HTTPS en producción.
-- No exponer hashes de `personal_access_tokens`.
+- No exponer hashes.
 - Filtrar datos por usuario.
+- Usar `textContent` en lugar de `innerHTML`.
+- Reaccionar correctamente a `401`.
 
 ---
 
-## 🛠️ Tecnologías utilizadas
+# ✅ Códigos HTTP comprobados
+
+| Código | Significado |
+|---|---|
+| `200` | Petición correcta |
+| `201` | Recurso/token creado |
+| `204` | Operación correcta sin cuerpo |
+| `302` | Redirección |
+| `401` | No autenticado |
+| `404` | Recurso ajeno/no visible |
+| `422` | Validación fallida |
+| `500` | Error interno provocado |
+
+---
+
+# 🛠️ Tecnologías utilizadas
 
 - Laravel 12
 - Laravel Sanctum
@@ -337,13 +543,17 @@ si se intenta reutilizar su token.
 - REST
 - JSON
 - Insomnia
+- JavaScript
+- Fetch API
+- Laravel HTTP Client
+- Tinker
 - Git
 - GitHub
 - XAMPP
 
 ---
 
-## ▶️ Ejecución
+# ▶️ Ejecución del proyecto
 
 ```bash
 git clone https://github.com/StanleyJv/taskboard-semana14.git
@@ -354,7 +564,13 @@ php artisan migrate:fresh --seed
 php artisan serve
 ```
 
-La API estará disponible en:
+Cliente web:
+
+```text
+http://127.0.0.1:8000/cliente.html
+```
+
+API:
 
 ```text
 http://127.0.0.1:8000/api
@@ -362,7 +578,7 @@ http://127.0.0.1:8000/api
 
 ---
 
-## 🔗 Repositorio
+# 🔗 Repositorio
 
 https://github.com/StanleyJv/taskboard-semana14
 

@@ -26,7 +26,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/comercios', function (Request $request) {
         return ComercioResource::collection(
             $request->user()
-                ->comercios()
+    ->comercios()
                 ->orderBy('nombre_comercio')
                 ->get()
         );
